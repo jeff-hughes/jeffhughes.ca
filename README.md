@@ -1,0 +1,3 @@
+# jeffhughes.ca
+
+These are the files for my personal website, [jeffhughes.ca](http://www.jeffhughes.ca). You should probably just go there...
