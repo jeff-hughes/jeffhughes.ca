@@ -1,41 +1,86 @@
 <!doctype html>
-<html class="no-js" lang="">
+<html class="no-js" lang="en">
 
 <head>
-  <meta charset="utf-8">
-  <title></title>
-  <meta name="description" content="">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta charset="utf-8">
+    <title></title>
+    <meta name="description" content="">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
 
-  <link rel="manifest" href="site.webmanifest">
-  <link rel="apple-touch-icon" href="icon.png">
-  <!-- Place favicon.ico in the root directory -->
-
-  <link rel="stylesheet" href="css/normalize.css">
-  <link rel="stylesheet" href="css/main.css">
-
-  <meta name="theme-color" content="#fafafa">
+    <link rel="stylesheet" href="css/normalize.css">
+    <link rel="stylesheet" href="css/main.css">
 </head>
 
 <body>
-  <!--[if IE]>
-    <p class="browserupgrade">You are using an <strong>outdated</strong> browser. Please <a href="https://browsehappy.com/">upgrade your browser</a> to improve your experience and security.</p>
-  <![endif]-->
+    <div id="container">
 
-  <!-- Add your site or application content here -->
-  <p>Hello world! This is HTML5 Boilerplate.</p>
-  <script src="js/vendor/modernizr-3.8.0.min.js"></script>
-  <script src="https://code.jquery.com/jquery-3.4.1.min.js" integrity="sha256-CSXorXvZcTkaix6Yvo6HppcZGetbYMGWSFlBw8HfCJo=" crossorigin="anonymous"></script>
-  <script>window.jQuery || document.write('<script src="js/vendor/jquery-3.4.1.min.js"><\/script>')</script>
-  <script src="js/plugins.js"></script>
-  <script src="js/main.js"></script>
+        <header id="header" class="clearfix">
+            <div class="logo">
+                <a href="index.html"><img src="img/logo_small.png" alt="Jeff Hughes" title="Jeff Hughes" /></a>
+            </div>
+            <ul id="sociallist">
+                <li>
+                    <a href="mail&#116;o&#58;je&#102;%66&#64;j%65f&#102;h&#37;&#55;5%&#54;7he&#115;&#46;&#99;&#97;"
+                        title="Email me"><img src="img/social/email.png" alt="Email" /></a>
+                </li>
+                <li>
+                    <a href="https://www.linkedin.com/in/jeff-hughes-2b4ba192/" title="View my LinkedIn profile"><img
+                            src="img/social/linkedin.png" alt="LinkedIn" /></a>
+                </li>
+                <li>
+                    <a href="https://github.com/jeff-hughes" title="Follow me on GitHub"><img
+                            src="img/social/github.png" alt="GitHub" /></a>
+                </li>
+            </ul>
+        </header>
+        <section id="main" role="main">
+            <a name="startcontent" id="startcontent" tabindex="-1"></a>
+            <h2>About Me</h2>
+            <p>
+                <img src="img/Jeff_Hughes.jpg" class="photo" />
+                Currently I am a data scientist at <a
+                    href="https://www.canada.ca/en/employment-social-development.html">Employment and Social Development
+                    Canada (ESDC)</a> in Gatineau, Quebec. My work involves leveraging machine learning, AI, and data
+                analytics to create more efficient and effective departmental processes, both internal and
+                public-facing. My previous job was also at ESDC, doing research related to persons with disabilities,
+                studying the impact that issues surrounding disability can have on people&rsquo;s employment, education,
+                and well-being.
+            </p>
+            <p>
+                I completed my PhD in Social Psychology at the <a href="http://www.uwaterloo.ca">University of
+                    Waterloo</a> (UW) in Ontario, Canada. My research focused on motivation, self-regulation, and
+                decision-making.
+            </p>
+            <a href="storage/Jeffrey%20Hughes%20Resume.pdf"><img src="img/pdf_icon_small.png"
+                    style="margin-right: 5px" />Resume</a>
+            </p>
 
-  <!-- Google Analytics: change UA-XXXXX-Y to be your site's ID. -->
-  <script>
-    window.ga = function () { ga.q.push(arguments) }; ga.q = []; ga.l = +new Date;
-    ga('create', 'UA-XXXXX-Y', 'auto'); ga('set','transport','beacon'); ga('send', 'pageview')
-  </script>
-  <script src="https://www.google-analytics.com/analytics.js" async></script>
+            <h2>Miscellaneous Projects</h2>
+            <p>
+                I currently have two R packages available on CRAN. The first, <a
+                    href="https://cran.r-project.org/web/packages/reghelper/index.html">reghelper</a>, assists with some
+                of the routine tasks associated with regression. A second, <a
+                    href="https://github.com/jeff-hughes/paramtest">paramtest</a>, provides a general structure for
+                running simulations and parameter searches.
+            </p>
+            <p>
+                Back in May 2017, I had the opportunity to teach R to graduate students and faculty at Wilfrid Laurier
+                University via a two-day workshop. <a href="rworkshop.html">The slides and code are available here</a>.
+            </p>
+            <h3>Data Science Projects</h3>
+            <ul>
+                <li><a href="data_science/movies/Movie-Ratings.html">Exploring Movie Ratings</a></li>
+                <li><a href="data_science/baseball/Predicting-Great-Pitchers.html">Predicting Great Pitchers</a></li>
+            </ul>
+
+        </section>
+        <hr class="section_divide" />
+        <footer>
+            &copy; Copyright 2020, <a href="http://www.jeffhughes.ca">Jeff Hughes</a>. All rights
+            reserved.
+        </footer>
+    </div>
+    <script src="js/vendor/modernizr-3.8.0.min.js"></script>
 </body>
 
 </html>
