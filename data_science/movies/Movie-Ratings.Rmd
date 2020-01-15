@@ -1,0 +1,505 @@
+---
+title: "Movie Ratings"
+output:
+  html_document:
+    theme: spacelab
+    highlight: tango
+    code_folding: hide
+---
+
+<style>
+.btn-default, .btn-default.active, .btn-default:hover, .btn-default:active,
+.btn-default:focus, .open>.dropdown-toggle.btn-default,
+.btn-default:active:hover, .btn-default.active:hover, .open>.dropdown-toggle.btn-default:hover, .btn-default:active:focus, .btn-default.active:focus, .open>.dropdown-toggle.btn-default:focus, .btn-default:active.focus, .btn-default.active.focus, .open>.dropdown-toggle.btn-default.focus {
+    background-image: none;
+    background-color: #f8f8f8;
+    border-color: #cccccc;
+    color: #333333;
+    text-shadow: none;
+}
+.table {
+    width: auto;
+}
+</style>
+
+#### *By [Jeff Hughes](http://www.jeffhughes.ca) (July 28, 2017)*
+
+I recently came across the [MovieLens database](https://grouplens.org/datasets/movielens/), which has 20+ million ratings of about 27,000 movies. Because I thought that sounded pretty cool, I decided to check out [MovieLens](https://movielens.org/) itself, and it turns out that's pretty cool too! It uses a collaborative filtering (machine learning) method to recommend movies to you based on movies you've already watched and rated.^[They actually have several different algorithms implemented that you can switch between, which is great if you're nerdy like me and want to see how your recommendations change depending on which information is being used.] The nice thing is that it shows you the predicted rating for each movie&mdash;what the algorithm thinks you would rate the movie. So while going through the initial process of rating movies you've seen, you can see it get more and more accurate. I've now rated close to 400 movies and it probably knows me better than my closest friends. It actually told me where I had misplaced my keys last week. I think it might actually use incantations of black magic somewhere in the algorithm.
+
+Anyway, the point is that they provide their database online for free, which is great! Kudos to the GroupLens research group for that. So I decided to play around with it and see what interesting information I could pull from it. You can see the code for all of these analyses by clicking on the buttons to the right, or go to the top of the page on the right and select "Show All Code". Note that I've converted the CSV files to R-native RDS files, just to make it a bit quicker to load the data, but the raw data is available [here](https://grouplens.org/datasets/movielens/). The code for all these analyses is [available on Github](https://github.com/jeff-hughes/Movie-Ratings). First let's load some packages we'll need, and the files for the list of movies, and list of ratings.
+
+```{r load_data, message=FALSE}
+library(knitr)
+library(psych)
+library(stringr)
+library(ggplot2)
+library(tidyr)
+library(dplyr)
+
+movies <- readRDS('movies.rds')
+ratings <- readRDS('ratings.rds')
+```
+
+## Ratings by Year
+
+One thing I wanted to know is whether there was a pattern for movie ratings across the year of release. Perhaps there was a "golden age" of cinema, so we should see a downward trend. Or perhaps there's a recency bias, such that people come out of the movie theatre, say "that was awesome!" and rate the movie as 5 stars. In the latter case, we'd expect an upward trend, because people might be relying on their hazy memories of older movies, unless they've rewatched them recently.
+
+I start by taking all 20 million ratings, and aggregating them by movie to calculate the mean rating for each (as well as the standard deviation). Below you can see an overall average. (The scale goes from a minimum of 0.5 stars to 5.0 stars.) It's a little tricky because this is an average of averages, but we can see that movies in this database were on average rated 3.13, with a standard deviation of about .66. And the median number of ratings for a movie was 18, though the range on that is quite impressive.
+
+```{r ratings_by_year}
+ratings_summ <- ratings %>%
+    group_by(movieId) %>%
+    summarise(
+        avg_rating=mean(rating, na.rm=TRUE),
+        sd=sd(rating, na.rm=TRUE),
+        n=n())
+
+# pull titles and genres back in to the data set
+ratings_summ <- inner_join(movies, ratings_summ, by='movieId')
+
+ratings_desc <- ratings_summ %>%
+    select(avg_rating, sd, n) %>%
+    describe() %>%
+    select(mean, sd, median, min, max)
+
+rownames(ratings_desc) <- c('Avg. Rating', 'SD', 'Num. Ratings')
+
+kable(
+    ratings_desc,
+    row.names=TRUE,
+    col.names=c('Mean', 'SD', 'Median', 'Min.', 'Max.'),
+    align='c',
+    digits=2)
+```
+
+The database puts the year of release at the end of the title of each movie, so we first need to extract that with a little regex magic. We then aggregate across movies by year, calculating the average rating for all movies in that year, plus the 95% confidence intervals. In the graph below, though, you can barely see the confidence intervals (the gray ribbon behind the line), as it's quite small and only really visible for the older movies. For this graph, I removed movies before 1915, as there was very little data for those older movies.
+
+```{r ratings_by_year2}
+ratings_summ$year <- as.numeric(str_match(ratings_summ$title, '\\(([0-9]+)\\)$')[, 2])
+
+by_year <- ratings_summ %>%
+    group_by(year) %>%
+    summarise(
+        rating=mean(avg_rating, na.rm=TRUE),
+        se=sd(avg_rating, na.rm=TRUE) / sqrt(sum(n, na.rm=TRUE)),
+        n=sum(n, na.rm=TRUE),
+        lo=rating - 1.96*se,
+        hi=rating + 1.96*se)
+
+# not much data for most years before 1915
+by_year <- by_year %>%
+    filter(!is.na(year), year >= 1915)
+
+ggplot(by_year, aes(x=year, y=rating)) +
+    geom_ribbon(aes(ymin=lo, ymax=hi), alpha=.2) +
+    geom_line() +
+    labs(x='Year', y='Avg. Rating (0.5 - 5.0)') +
+    theme_minimal()
+```
+
+Visually, there doesn't seem to be a very strong trend, but if we fit a linear model to it, there is actually a slight downward trend across years. This is basically as simple a model as you can get, but it does explain about 30% of the variance, so that's...interesting. This could suggest that perhaps there's a nostalgia factor, with people remembering movies as being better the further back in time they were made; or it could mean movies really were better back then; or it could be a selection bias, that older movies that get added to the database tend to be the better ones that people actually remember. It's hard to really say which it could be. At any rate, it looks like maybe the late 80s to early 90s show the low point of a slump, but in recent years the ratings have been increasing again. I'm not sure what to make of the most recent year of data (2015), but there are fewer movies in the database, so I suspect the data dump happened partway through the year, so maybe the movies early in the year were especially bad.^[The downward linear trend is still there, with about the same strength, if movies for 2015 are removed.]
+
+```{r linear_model_year}
+summary(lm(rating ~ year, by_year))
+```
+
+## Top Rated Movies
+
+Let's take a look at what our trusty movie raters think about the best and worst movies, shall we? Here are the top 20:
+
+```{r by_movie}
+by_movie <- ratings %>%
+    group_by(movieId) %>%
+    summarise(
+        avg_rating=mean(rating, na.rm=TRUE),
+        num_ratings=n(),
+        rating_sd=sd(rating, na.rm=TRUE),
+        rating_se=rating_sd / sqrt(n())) %>%
+    inner_join(movies, by='movieId') %>%
+    arrange(desc(avg_rating))
+
+by_movie %>%
+    filter(num_ratings > 100) %>%
+    select(title, avg_rating, rating_sd, num_ratings) %>%
+    head(n=20) %>%
+    kable(
+        row.names=FALSE,
+        col.names=c('Title', 'Avg. Rating', 'SD', 'Num. Ratings'),
+        align='lccc',
+        digits=c(NA, 2, 2, 0))
+```
+
+This looks about right to me. There are a few on here I haven't seen, but of the ones I have, these seem pretty much in line with what I would expect. And if they're in line with my own personal preferences in movies, they *must* be correct, right? Right? Okay, so of course this is subjective. But the bottom line is...if you haven't seen any of these movies, go watch them now. Well, finish reading this, and *then* go watch them.
+
+But let's see what the worst movies of all time are.
+
+```{r by_movie2}
+bottom20 <- by_movie %>%
+    filter(num_ratings > 100) %>%
+    select(title, avg_rating, rating_sd, num_ratings) %>%
+    tail(n=20)
+
+# fix a couple non-ASCII characters
+bottom20[9, 'title'] <- 'Pokemon 4 Ever (a.k.a. Pokemon 4: The Movie) (2002)'
+bottom20[14, 'title'] <- 'Pokemon Heroes (2003)'
+
+bottom20 %>%
+    kable(
+        row.names=FALSE,
+        col.names=c('Title', 'Avg. Rating', 'SD', 'Num. Ratings'),
+        align='lccc',
+        digits=c(NA, 2, 2, 0))
+```
+
+Personally, the thing I love most about this list is just how many sequels there are. Carnosaur 2 was apparently one of the worst movies of all time, *and then* they decided to make Carnosaur 3. Faces of Death has *four separate movies* in the bottom 20 movies of all time. But come on, people&mdash;How is Barney's Great Adventure this low? That movie was a masterpiece.
+
+## Ratings by User Tag
+
+Another fun thing about this database is that users can add "tags" to a movie to identify them with different themes or put them in different groups. These tags are completely open-ended, so there are lots of great tags like "wasted potential" and "Ethan Hunt Should Stop Hogging The Screen!" and "the director should be shot". Those might not be particularly useful for identifying trends in movies, since they are often only applied to one movie. But there are lots of other great user tags. So what tags might you look for to find the best movies? Or the worst?
+
+```{r best_tags}
+tags <- readRDS('tags.rds')
+tags <- inner_join(tags, by_movie, by='movieId')
+tags$tag <- tolower(tags$tag)
+
+all_tags <- tags %>%
+    select(movieId, tag, avg_rating, num_ratings) %>%
+    distinct() %>%  # only want one tag per movie
+    group_by(tag) %>%
+    summarise(
+        avg_rating=mean(avg_rating),
+        num_ratings=sum(num_ratings),
+        num_movies=n())
+
+all_tags %>%
+    filter(num_ratings > 100, num_movies > 5) %>%
+    arrange(desc(avg_rating)) %>%
+    head(n=30) %>%
+    kable(
+        row.names=FALSE,
+        col.names=c('Tag', 'Avg. Rating', 'Num. Ratings', 'Num. Movies'),
+        align='lccc',
+        digits=c(NA, 2, 0, 0))
+```
+
+Some of these are fairly straight-forward. The tags having to do with "AFI" refer to the American Film Institute, which puts out a [ranking of top 100 movies](http://www.afi.com/100years/movies10.aspx); and tags related to [IMDB top 250](http://www.imdb.com/chart/top) refer to another common list of best movies. But we can also see that anime films, films with [Claude Rains](http://www.imdb.com/name/nm0001647/), and films by directors like  [Spielberg](http://www.imdb.com/name/nm0000229/), [Lucas](http://www.imdb.com/name/nm0000184/), [Kurosawa](http://www.imdb.com/name/nm0000041/), and [Miyazaki](http://www.imdb.com/name/nm0594503/), all get highly rated. People also seem to like movies about Palestine, Wallace and Gromit, and films nominated for Oscars in cinematography. I do love that the "wildly overrated" tag shows up on highly-rated films, too. Apparently somebody doesn't agree very much with those ratings. In case you're curious, here are the overrated films. (I happen to disagree with whoever tagged them as overrated. I think they're rated just fine the way they are, thank you.)
+
+```{r overrated}
+overrated <- tags %>%
+    filter(tag == 'wildly overrated') %>%
+    select(title)
+
+overrated[4, 'title'] <- 'Amelie (Fabuleux destin d\'Amelie Poulain, Le) (2001)'
+
+overrated %>%
+    kable()
+```
+
+And just for good measure, here are the tags people gave to the lowest-rated films:
+
+```{r worst_tags}
+all_tags %>%
+    filter(num_ratings > 100, num_movies > 5) %>%
+    arrange(desc(avg_rating)) %>%
+    tail(n=30) %>%
+    kable(
+        row.names=FALSE,
+        col.names=c('Tag', 'Avg. Rating', 'Num. Ratings', 'Num. Movies'),
+        align='lccc',
+        digits=c(NA, 2, 0, 0))
+```
+
+Looks like people don't like [Steve Guttenberg](http://www.imdb.com/name/nm0000430/), [Albert Pyun](http://www.imdb.com/name/nm0089502/), [Chuck Norris](http://www.imdb.com/name/nm0001569/), [Menahem Golan](http://www.imdb.com/name/nm0324875/), [Steven Seagal](http://www.imdb.com/name/nm0000219/), and of course, [Uwe Boll](http://www.imdb.com/name/nm0093051/). People also don't seem to like film adaptations of games, TV shows, cartoons, and animations remade as live action. Also, apparently the Jason films are really disliked, at least by people who can't spell the name of the main character (Jason Voorhees).
+
+## Ratings by Cast and Crew
+
+One thing that I really wanted to be able to do is take a look at how movies by particular directors, actors, etc. are rated. While this information isn't in the MovieLens database, it does provide the ID numbers to link movies with [IMDB](http://www.imdb.com) and [TMDB](https://www.themoviedb.org), the latter of which has an open API. From there, I was able to pull the full cast and crew credits for almost all the movies in the MovieLens database!
+
+```{r cast_crew}
+links <- readRDS('links.rds')
+
+# NOTE: This isn't being run because it takes a long time. But if you're interested in doing the same,
+# you can run the same function, just give it your API.
+
+# get_cast_crew <- function(ids, api_key) {
+#     counter <- 0
+#     cast <- data.frame(movie_id=numeric(0), person_id=numeric(0), name=character(0),
+#         character=character(0), gender=numeric(0), order=numeric(0), stringsAsFactors=FALSE)
+#     crew <- data.frame(movie_id=numeric(0), person_id=numeric(0), name=character(0),
+#         department=character(0), job=character(0), gender=numeric(0), stringsAsFactors=FALSE)
+#     
+#     for (i in 1:length(ids)) {
+#         if (!is.na(links[i, 'tmdbId'])) {
+#             url <- paste0('https://api.themoviedb.org/3/movie/', ids[i], '/credits?api_key=', api_key, '&language=en-US')
+#             rqst <- GET(url)
+#             
+#             if (rqst$status_code == 200) {
+#                 data <- content(rqst)
+#                 
+#                 cs_cnt <- length(data$cast)
+#                 if (cs_cnt > 0) {
+#                     cast_tmp <- data.frame(movie_id=numeric(cs_cnt), person_id=numeric(cs_cnt),
+#                         name=character(cs_cnt), character=character(cs_cnt),
+#                         gender=numeric(cs_cnt), order=numeric(cs_cnt), stringsAsFactors=FALSE)
+#                 
+#                     for (cs in 1:cs_cnt) {
+#                         cast_tmp[cs, 'movie_id'] <- ids[i]
+#                         cast_tmp[cs, 'person_id'] <- data$cast[[cs]]$id
+#                         cast_tmp[cs, 'name'] <- data$cast[[cs]]$name
+#                         cast_tmp[cs, 'character'] <- data$cast[[cs]]$character
+#                         cast_tmp[cs, 'gender'] <- data$cast[[cs]]$gender
+#                         cast_tmp[cs, 'order'] <- data$cast[[cs]]$order
+#                     }
+#                     cast <- rbind(cast, cast_tmp)
+#                 }
+#                 
+#                 cr_cnt <- length(data$crew)
+#                 if (cr_cnt > 0) {
+#                     crew_tmp <- data.frame(movie_id=numeric(cr_cnt), person_id=numeric(cr_cnt),
+#                         name=character(cr_cnt), department=character(cr_cnt), job=character(cr_cnt),
+#                         gender=numeric(cr_cnt), stringsAsFactors=FALSE)
+#                     
+#                     for (cr in 1:cr_cnt) {
+#                         crew_tmp[cr, 'movie_id'] <- ids[i]
+#                         crew_tmp[cr, 'person_id'] <- data$crew[[cr]]$id
+#                         crew_tmp[cr, 'name'] <- data$crew[[cr]]$name
+#                         crew_tmp[cr, 'department'] <- data$crew[[cr]]$department
+#                         crew_tmp[cr, 'job'] <- data$crew[[cr]]$job
+#                         crew_tmp[cr, 'gender'] <- data$crew[[cr]]$gender
+#                     }
+#                     crew <- rbind(crew, crew_tmp)
+#                 }
+#             }
+#             
+#             # limit rate
+#             if ('x-ratelimit-remaining' %in% names(rqst$headers) &&
+#                     as.numeric(rqst$headers$`x-ratelimit-remaining`) == 1) {
+#                 
+#                 reset_time <- as.POSIXct(as.numeric(rqst$headers$`x-ratelimit-reset`), origin='1970-01-01')
+#                 sleep_time <- difftime(reset_time, Sys.time())
+#                 if (sleep_time > 0) {
+#                     Sys.sleep(sleep_time + 1)
+#                 }
+#             }
+#         }
+#     }
+#     
+#     return(list(cast=cast, crew=crew))
+# }
+# 
+# output <- get_cast_crew(links[1:nrow(links), 'tmdbId'], '<<YOUR API HERE>>')
+# saveRDS(output$cast, file='cast.rds')
+# saveRDS(output$crew, file='crew.rds')
+
+cast <- readRDS('cast.rds')
+crew <- readRDS('crew.rds')
+
+cast <- cast %>%
+    inner_join(select(links, tmdbId, movieId), by=c('movie_id'='tmdbId')) %>%
+    rename(tmdbId=movie_id)
+crew <- crew %>%
+    inner_join(select(links, tmdbId, movieId), by=c('movie_id'='tmdbId')) %>%
+    rename(tmdbId=movie_id)
+
+cast <- cast %>%
+    inner_join(movies, by='movieId')
+crew <- crew %>%
+    inner_join(movies, by='movieId')
+
+cast <- cast %>%
+    inner_join(select(by_movie, -title, -genres), by='movieId')
+crew <- crew %>%
+    inner_join(select(by_movie, -title, -genres), by='movieId')
+```
+
+Of course, once I realized that I could get the credits for all these movies, I immediately wanted to compare movie ratings by who was the [Best Boy](https://en.wikipedia.org/wiki/Best_boy) for the movie, so we could determine once and for all who the **real** "Best" Boy is. Unfortunately, the credits only cover the more major roles.^[Forgive me for calling probably half the roles in the film industry "minor." I'm not really sure how it's decided who gets put in the credits, and why someone's name would be in the credits of the film but not in the database. I'm assuming there's some sort of "major/minor" cutoff, but I really don't know. Some credits in the database include hairstylists and visual effects but not lighting or camera operators, so I don't have any clue who gets included. The point is I'm not trying to say your job isn't important, Mr. Best Boy. You may not get the recognition you deserve on The Movie Database, but I'm sure your mother is very proud.] So I'm a little more limited in the questions I can answer, but there's still a boatload of information for all these movies. So let's pick some fun ones!
+
+### Best Directors
+
+Let's start with movie directors. Who are the best directors of all time? We can, of course, easily answer this *definitively* and *objectively*, with this data based on completely subjective ratings.
+
+```{r directors}
+by_director <- crew %>%
+    filter(job == 'Director') %>%
+    group_by(person_id) %>%
+    summarise(
+        name=nth(name, 1),
+        avg_rating=mean(avg_rating, na.rm=TRUE),
+        num_movies=n(),
+        num_ratings=sum(num_ratings, na.rm=TRUE)) %>%
+    filter(num_ratings > 100, num_movies > 5) %>%
+    arrange(desc(avg_rating))
+
+head(by_director, n=20) %>%
+    select(name, avg_rating, num_ratings, num_movies) %>%
+    kable(
+        row.names=FALSE,
+        col.names=c('Name', 'Avg. Rating', 'Num. Ratings', 'Num. Movies'),
+        align='lccc',
+        digits=c(NA, 2, 0, 0))
+```
+
+Some of these completely go without saying. Miyazaki, Nolan, Tarantino, Kurosawa, Fincher, Coen&mdash;even if you might quibble over which of these belong in which order, they are certainly worthy of being on a Top 20 list. However, I was surprised by Louis C.K. being on there&mdash;I guess people really love his comedy. Keep in mind that his directorial credits are primarily for his comedy specials, which probably get rated on a somewhat different scale in relation to more traditional films. That said, his TV show Louie (though not in this database) is pretty great! Shannon Hartman is also a director of many comedy specials; Nick Park is director on the Wallace and Gromit films (which as noted above, people love). It's important to keep in mind that although great directors make great films, the greatness of a film could be due to something other than the director. These are ratings of the *movies*, not ratings of the *directors*. As such, this list is really a list of directors who make movies that people (on average) really like. So yes, that includes the work of Studio Ghibli (Miyazaki), but it also includes the comedy stylings of Louis C.K.
+
+### Best Lead Actors
+
+The casting data from TMDB also includes the billing order, so we can take a look at which lead actors are in the top-rated movies:
+
+```{r best_lead}
+by_lead <- cast %>%
+    filter(num_ratings > 100, order == 0) %>%
+    group_by(person_id) %>%
+    summarise(
+        name=nth(name, 1),
+        avg_rating=mean(avg_rating, na.rm=TRUE),
+        num_movies=n(),
+        num_ratings=sum(num_ratings, na.rm=TRUE)) %>%
+    filter(num_movies > 5) %>%
+    arrange(desc(avg_rating))
+
+head(by_lead, n=20) %>%
+    select(name, avg_rating, num_ratings, num_movies) %>%
+    kable(
+        row.names=FALSE,
+        col.names=c('Name', 'Avg. Rating', 'Num. Ratings', 'Num. Movies'),
+        align='lccc',
+        digits=c(NA, 2, 0, 0))
+```
+
+There's a definite skew there toward actors in older films, and perhaps that's because I limited it to those who were the leads in more than five movies (otherwise it tends to skew toward those who had one good movie). But hey, Ryan Gosling is representing the modern era here! My data here suggests that if he were to put on some glasses and a thick mustache, like Groucho Marx, he might improve his career even further.
+
+And here we have the leads in the worst-rated movies:
+
+```{r worst_lead}
+tail(by_lead, n=20) %>%
+    select(name, avg_rating, num_ratings, num_movies) %>%
+    kable(
+        row.names=FALSE,
+        col.names=c('Name', 'Avg. Rating', 'Num. Ratings', 'Num. Movies'),
+        align='lccc',
+        digits=c(NA, 2, 0, 0))
+```
+
+This is...about what I would expect. Rob Schneider nearing the bottom? Yep. I'm just sad for poor ol' Jim Varney, who starred in all those "Ernest" movies I watched as a kid, which probably would not at all hold up if I were to rewatch them. I'll just leave those as a pleasant memory.^[The sad thing is that Varney's face is so expressive, I can vividly see in my mind his glum expression upon seeing he's at the bottom of the list. Poor Jim Varney.]
+
+Well, this makes me wonder if actors have an arc to their career. Do they start off poorly, then have a peak somewhere in their career, before fading off into obscurity? Perhaps that's what they experience with regard to their fame as celebrities, but does that bear out in the ratings of the movies they make over their career? Let's find out!
+
+To test this, I calculated the average movie ratings for each actor in each year of their career. I then fit a hierarchical linear model (HLM) that gives each actor a random intercept (i.e., the model fits each actor with their own mean level), and then looks at the linear and quadratic effects of year of career. If you're not familiar with HLM, that's okay&mdash;the main story here is that there's a slight downward linear trend across an actor's career, but also evidence for a slight U-shape. It's a little easier to see in the graph below.
+
+```{r career, message=FALSE}
+cast$year <- as.numeric(stringr::str_match(cast$title, '\\(([0-9]+)\\)$')[, 2])
+
+# average across all movies for an actor per year
+by_person_by_year <- cast %>%
+    group_by(person_id, year) %>%
+    summarise(
+        name=nth(name, 1),
+        avg_rating=mean(avg_rating, na.rm=TRUE),
+        num_movies=n(),
+        num_ratings=sum(num_ratings, na.rm=TRUE)) %>%
+    group_by(person_id) %>%
+    mutate(year=year - first(year) + 1)  # this resets the year so all actors start at year 1
+
+# hierarchical linear model testing linear and quadratic effects of year, after allowing
+# for a random intercept for each actor
+library(nlme)
+model <- lme(avg_rating ~ year + I(year^2), random=~1|person_id, data=by_person_by_year,
+    na.action=na.omit)
+summary(model)
+```
+
+```{r career_graph}
+grid <- data.frame(year=1:max(by_person_by_year$year, na.rm=TRUE))
+grid$avg_rating <- predict(model, grid, level=0, na.action=na.omit)
+
+# this is just to calculate standard error from an HLM
+# code from: http://glmm.wikidot.com/faq
+designmat <- model.matrix(formula(model)[-2], grid)
+predvar <- diag(designmat %*% vcov(model) %*% t(designmat))
+se <- sqrt(predvar)
+
+grid$error_upper <- grid$avg_rating + 1.96 * se
+grid$error_lower <- grid$avg_rating - 1.96 * se
+
+ggplot(grid, aes(x=year, y=avg_rating)) +
+    geom_ribbon(aes(ymin=error_lower, ymax=error_upper), alpha=.2) +
+    geom_line() +
+    ylim(0.5, 5) +
+    labs(x='Year of Actor\'s Career', y='Avg. Rating (0.5 - 5.0)') +
+    theme_minimal()
+```
+
+It looks as though actors tend to start strong in their first few years, but movie ratings tend to dip a little mid-career. If they have a long career, they may get a rise in ratings again. However, keep in mind that this could be a survivorship bias&mdash;it may be that better actors are just more likely to have a long career, so as the poorer actors drop out, the average tends to increase. It's hard to say. The notable thing about the graph is that the dip is still quite slight. There's much more variation between movies for any given year than there are overall changes in average ratings across an actor's career.
+
+### Best Screenplay
+
+Another group of people we can look at are screenplay writers. Let's take a look at writers who have written more than five screenplays:
+
+```{r screenplay}
+crew %>%
+    filter(job == 'Screenplay') %>%
+    group_by(person_id) %>%
+    summarise(
+        name=nth(name, 1),
+        avg_rating=mean(avg_rating, na.rm=TRUE),
+        num_movies=n(),
+        num_ratings=sum(num_ratings, na.rm=TRUE)) %>%
+    filter(num_ratings > 100, num_movies > 5) %>%
+    arrange(desc(avg_rating)) %>%
+    head(n=20) %>%
+    select(name, avg_rating, num_ratings, num_movies) %>%
+    kable(
+        row.names=FALSE,
+        col.names=c('Name', 'Avg. Rating', 'Num. Ratings', 'Num. Movies'),
+        align='lccc',
+        digits=c(NA, 2, 0, 0))
+```
+
+Again, a lot of these names should probably be familiar. Having a great screenplay really shows, and these folks have done amazing things. People really love their Nolan films, and it's no surprise why.
+
+### Best Novel Adaptations
+
+One interesting tidbit in the credits is that if a movie is adapted from a book, the author shows up in the credits as well. So we can easily find all the authors who have had really good (and really bad) adaptations of their work:
+
+```{r best_novels}
+novel <- crew %>%
+    filter(job == 'Novel') %>%
+    group_by(person_id) %>%
+    summarise(
+        name=nth(name, 1),
+        avg_rating=mean(avg_rating, na.rm=TRUE),
+        num_movies=n(),
+        num_ratings=sum(num_ratings, na.rm=TRUE)) %>%
+    filter(num_ratings > 100, num_movies >= 3) %>%
+    arrange(desc(avg_rating))
+
+head(novel, n=20) %>%
+    select(name, avg_rating, num_ratings, num_movies) %>%
+    kable(
+        row.names=FALSE,
+        col.names=c('Name', 'Avg. Rating', 'Num. Ratings', 'Num. Movies'),
+        align='lccc',
+        digits=c(NA, 2, 0, 0))
+```
+
+I had no idea who the top author was. Turns out that he was a Bengali author who wrote a novel that was later adapted into a trilogy of films frequently heralded as the greatest movies from Bollywood, [The Apu Trilogy](https://en.wikipedia.org/wiki/The_Apu_Trilogy). Cool stuff! Apparently I'm not really up on my Bollywood films. Some of the others I'm familiar with&mdash;Jane Austen should need no introduction, Stieg Larsson and J.K. Rowling have more recent works that have been adapted, and there's good ol' Billy Shakespeare rounding out the Top 20. And of course, Mario Puzo wrote The Godfather, so *of course* his film adaptations are highly rated!
+
+But yeah, let's look at the authors with the worst film adaptations:
+
+```{r worst_novels}
+tail(novel, n=20) %>%
+    select(name, avg_rating, num_ratings, num_movies) %>%
+    kable(
+        row.names=FALSE,
+        col.names=c('Name', 'Avg. Rating', 'Num. Ratings', 'Num. Movies'),
+        align='lccc',
+        digits=c(NA, 2, 0, 0))
+```
+
+Some of these make me sad. Jules Verne! Arthur Conan Doyle! Jonathan Swift! I love all these authors. But I guess it's not their fault that somebody made terrible film adaptations of their excellent books. Then, of course, there are other authors like Ayn Rand and Stephenie Meyer...when the source material is that bad, it's hard to make a good film adaptation, am I right?
+
+## Conclusion
+
+There is lots of information in this database. You could take a look, for instance, at which actors do better in leading roles than in supporting roles. Or because each rating is timestamped, you could take a look at how ratings evolve&mdash;from when the movie first comes out, to later on in time. TMDB also includes information about the budget for each film, so you could take a look at how much budget influences ratings, or which films got the most bang for their buck. I might do a follow-up on some of these questions, because there's so much you can do with this data! But for now...this article is done, so you can go watch all those top 20 films now. I highly recommend Seven Samurai and City of God. Two fantastic films. But if you want better recommendations than just the ones from my head, go sign up for MovieLens and let its algorithm recommend for you! (I'm not in any way affiliated with them; I just think they made a really cool website.)
+
+**FIN.**

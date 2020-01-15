@@ -1,0 +1,328 @@
+---
+title: "Predicting Great Pitchers"
+output:
+  html_document:
+    theme: spacelab
+    highlight: tango
+    code_folding: hide
+  html_notebook: default
+---
+
+<style>
+.btn-default, .btn-default.active, .btn-default:hover, .btn-default:active,
+.btn-default:focus, .open>.dropdown-toggle.btn-default,
+.btn-default:active:hover, .btn-default.active:hover, .open>.dropdown-toggle.btn-default:hover, .btn-default:active:focus, .btn-default.active:focus, .open>.dropdown-toggle.btn-default:focus, .btn-default:active.focus, .btn-default.active.focus, .open>.dropdown-toggle.btn-default.focus {
+    background-image: none;
+    background-color: #f8f8f8;
+    border-color: #cccccc;
+    color: #333333;
+    text-shadow: none;
+}
+.table {
+    width: auto;
+}
+</style>
+
+#### *By [Jeff Hughes](http://www.jeffhughes.ca) (July 22, 2017)*
+
+Predicting things with varying amounts of data is a common problem. If you are comparing two products, one of which has a 4.5 / 5 rating based on 3 reviews, and another with a 4.0 / 5 rating based on 1200 reviews, which is the better product? On the one hand, in an objective sense, 4.5 is higher than 4.0. On the other hand, one of those ratings is based on much less data. Maybe the three people who reviewed the first product all just happened to love it. Or maybe those ratings were given by friends of the seller!
+
+In cases like these, it is important to weigh the data itself (i.e., the rating) by the amount or quality of the data you have. Implicit in this is that when we have little data, we should be more uncertain about the true value&mdash;and as such, we need to incorporate this uncertainty into our predictions. This is a situation where Bayesian models are an excellent choice.
+
+So let's talk about one of these scenarios in baseball. I am not a baseball fanatic. When I was young, I did enjoy keeping up with baseball. But to be honest, I think I got more enjoyment from updating the team statistics on my Excel spreadsheet than I did actually watching the games.^[Yes, I was a data nerd even from a young age.] But I haven't really followed baseball in 15 years or more. That said, baseball is a game for nerds. There are lots of great statistics you can use in baseball&mdash;and people in the stands who actually sit there meticulously keeping track of them. The following post is inspired by a post on baseball batting averages by [David Robinson on empirical Bayes](http://varianceexplained.org/r/empirical_bayes_baseball/), but applied to a different context.
+
+## The Problem
+
+Let's say we want to evaluate major league pitchers. One key statistic used for pitchers is their ERA: Earned Run Average. This is calculated by taking the number of earned runs^[An earned run means there was no error on the play.] they allowed while pitching and dividing it by the number of innings pitched.^[Innings pitched is calculated based on the number of outs. So if a pitcher pitches two outs in the first inning, then gets replaced, they have pitched "0.67" innings. This complicates the analysis quite a bit&mdash;a pitcher could pitch against 15 batters, get zero outs, let in 12 runs, and then get replaced, and an IP of 0 would be recorded. If a summary statistic was recorded that tallied up the number of batters a pitcher faced, the problem could be modeled more intuitively as a Binomial process. But that would require going back to raw data to tally up the runs scored during each batter in each game.] This value is then multiplied by 9 to extend the average over 9 innings. So essentially, the lower a pitcher's ERA, the better a pitcher they are&mdash;they allow the other team to get fewer runs.
+
+Pitchers already vary in the number of innings they pitch. Like the example of product reviews, an ERA calculated over fewer innings is likely to be a more unstable estimate of a pitcher's true ability. So this would be a great case for using a Bayesian approach. However, let's make it a bit more challenging still. What I'd like to do is take a pitcher's ERA over just their *first* year of pitching, and see how well we can predict what their overall ERA will be over the rest of their entire career.^[I subtract out the first year's data from the career ERA calculation so we're not double-counting data.] This is quite a challenge&mdash;how accurately can we predict a pitcher's career based on the dozen or so innings they pitched as a rookie? Well, let's try it and find out.
+
+## Exploring the Data
+
+I first load some packages and the data. You can see the code for this analysis by clicking on the buttons to the right, or go to the top of the page on the right and select "Show All Code". The raw code is also [available on Github](https://github.com/jeff-hughes/Baseball-Pitchers). I'm using [Sean Lahman's baseball database](http://www.seanlahman.com/baseball-archive/statistics/), an excellent source of data with statistics all the way from 1871 to 2016. However, I'm going to select only data from 1945 onwards, as the game itself has evolved in ways that might introduce a lot more complexity. That still gives us plenty of data to work with.
+
+```{r load_data, message=FALSE}
+library(knitr)
+library(ggplot2)
+library(dplyr)
+theme_set(theme_light() + theme(panel.grid.major=element_blank(), panel.grid.minor=element_blank()))
+
+master <- read.csv('Master.csv', stringsAsFactors=FALSE)
+pitching <- read.csv('Pitching.csv', stringsAsFactors=FALSE)
+
+pitching <- pitching %>%
+    filter(yearID >= 1945, IPouts > 0) %>%
+    group_by(playerID) %>%
+    mutate(year=yearID - first(yearID) + 1) %>%
+    ungroup()
+```
+
+Below you can see a plot of pitchers' ERAs over each year of their career. You can see a couple things: First off, most pitchers have a career spanning less than 20 years. Second, while the average ERA stays relatively stable (as noted by the loess line in blue), there is much more variability in the early years. However, this may be due in part to calculating averages over fewer innings pitched. It's easy to have an absurdly high (or low) ERA if you've only pitched a single inning!
+
+```{r plot_by_year, message=FALSE, warning=FALSE}
+ggplot(pitching, aes(x=year, y=ERA)) +
+    geom_jitter(alpha=.1) +
+    geom_smooth() +
+    ylim(0, 100) +
+    labs(x='Year of Career') +
+    theme(panel.grid.major=element_blank(),
+        panel.grid.minor=element_blank())
+```
+
+Now I'll pull out the first year of data for each pitcher, and calculate their ERA over that year. On average, pitchers pitched about 40 innings in their first year, plus or minus around 46. However, there's some skew to the data, so the graph below might give you a better picture.
+
+```{r first_year}
+first_year <- pitching %>%
+    filter(year == 1)
+
+first_year <- first_year %>%
+    group_by(playerID) %>%
+    summarize(ER=sum(ER), IP=(sum(IPouts) / 3)) %>%
+    mutate(ERA=9 * ER/IP)
+
+first_year <- master %>%
+    select(playerID, nameFirst, nameLast) %>%
+    inner_join(first_year, by='playerID') %>%
+    arrange(desc(ERA))
+
+cat('Mean:', mean(first_year$IP), '\nStandard Deviation:', sd(first_year$IP))
+```
+
+```{r graph_IP, message=FALSE}
+ggplot(first_year, aes(x=IP)) +
+    geom_histogram() +
+    labs(x='Innings Pitched in First Year', y='Count')
+```
+
+So let's make sure we actually have an issue here first. If we have an issue with minimal data for some players, we should see that the people with really high or really low ERAs tend to have little data (few IP). People with more data should tend to fall somewhere in the middle instead of at the extremes. Here are the 10 pitchers with the highest ERA:
+
+```{r first_year_head}
+first_year %>%
+    select(nameFirst, nameLast, ER, IP, ERA) %>%
+    head(n=10) %>%
+    kable(
+        row.names=FALSE,
+        col.names=c('First Name', 'Last Name', 'ER', 'IP', 'ERA'),
+        align='llccc',
+        digits=c(NA, NA, 0, 2, 1))
+```
+
+And here are the pitchers with the lowest ERA:
+
+```{r first_year_tail}
+first_year %>%
+    select(nameFirst, nameLast, ER, IP, ERA) %>%
+    tail(n=10) %>%
+    kable(
+        row.names=FALSE,
+        col.names=c('First Name', 'Last Name', 'ER', 'IP', 'ERA'),
+        align='llccc',
+        digits=c(NA, NA, 0, 2, 1))
+```
+
+As you can see, they all have very little data. One pitcher, Jeff Zaske, surprisingly pitched *5 innings* without an earned run, but the rest are around 1 inning or less. Obviously, this isn't too helpful for figuring out who the best pitchers are.
+
+## Constructing the Bayesian Model
+
+To solve this problem, I am going to use empirical Bayes to estimate a "true 1st-year ERA" for pitchers. This is then applied to all pitchers in our data set to essentially "pull in" pitchers with little data toward the mean. The general idea is this: If we had absolutely *no* information about a pitcher, our best guess would be the mean. If we have just a little information about a pitcher, we can use that information, but we should still weight that along with the mean so that our predictions get pulled in closer to the mean. The more data we have, the more weight we give to that data and the less weight we give to the mean in our prediction.
+
+ERA can be considered a rate variable, modelled by a Poisson process where earned runs occur at a certain rate per inning pitched. The prior probability for the rate can be modelled by a Gamma distribution, and because I'm using an empirical Bayes approach, I'm going to use the data to determine the hyperparameters of that Gamma distribution. I'm actually going to grab a subset of the data in order to provide a better estimate&mdash;I'll restrict the data to those who have pitched more than 20 innings. This just ensures that we get rid of some of those extremes at either end. Here's the distribution for those 20-inning-plus pitchers:
+
+```{r histogram, message=FALSE}
+first_year_filtered <- first_year %>%
+    filter(IP > 20)
+ggplot(first_year_filtered, aes(x=ERA)) +
+    geom_histogram() +
+    labs(y='Count')
+```
+
+We can take the mean and variance of that distribution to determine the shape ($\alpha_0$) and rate ($\beta_0$) for our Gamma distribution. (If you're not familiar with Bayesian approaches, that's fine. The bottom line is that I'm using the data to figure out a general "average" ERA.)
+
+```{r create_prior}
+cat('Mean:', mean(first_year_filtered$ERA), '\nVariance:', var(first_year_filtered$ERA))
+
+# shape / rate = mean
+# shape / rate^2 = variance
+# therefore, mean*rate - variance*rate^2 = 0
+# we then solve for the roots of this equation to get the rate
+rate <- as.numeric(polyroot(c(-var(first_year_filtered$ERA), mean(first_year_filtered$ERA))))
+shape <- mean(first_year_filtered$ERA) * rate
+```
+
+If we assume the likelihood is generated from a Poisson distribution, then Gamma and Poisson are what are known as *conjugate priors*, which means we get another Gamma distribution out at the end. That just makes the math a little easier; if we wanted to model this differently, you could also use Markov Chain Monte Carlo (MCMC) methods to sample from the posterior distribution. I'll return to that at the end when talking about some ways to extend this example. However, right now here's what I'm doing: I just calculated a prior Gamma distribution above based on the data. Then, for each pitcher in the data set, I combine the prior distribution and their actual data to create a posterior Gamma distribution for each pitcher. The conjugate priors make this relationship nice and simple; the posterior shapes and rates for each pitcher ($i$) are calculated as follows:
+
+$\alpha_i = \alpha_0 + ER_i$
+
+$\beta_i = \beta_0 + IP_i$
+
+This means we get a full probability distribution for each player, giving us the likely values for each player's true ERA. I could leave that there if I wanted to, but given that I want to use this to predict their future career ERA, it's useful to also grab some "best estimate" for each player. Below I calculate the median value; however, you could just as easily calculate the mean, or some other estimate of your choosing.
+
+```{r calc_posteriors}
+first_year$post_ERA_shape <- shape + first_year$ER
+first_year$post_ERA_rate <- rate + first_year$IP
+first_year$post_ERA_mdn <- qgamma(.5, shape=first_year$post_ERA_shape, rate=first_year$post_ERA_rate) * 9
+
+first_year <- first_year %>%
+    arrange(desc(post_ERA_mdn))
+```
+
+After sorting by this median estimate, then, here are the estimates for the pitchers with the highest ERA:
+
+```{r top_ests}
+first_year %>%
+    select(nameFirst, nameLast, ER, IP, ERA, post_ERA_mdn) %>%
+    head(n=10) %>%
+    kable(
+        row.names=FALSE,
+        col.names=c('First Name', 'Last Name', 'ER', 'IP', 'ERA', 'Median Est. ERA'),
+        align='llcccc',
+        digits=c(NA, NA, 0, 2, 1, 1))
+```
+
+And here are the pitchers with the lowest estimates:
+
+```{r bot_ests}
+first_year %>%
+    select(nameFirst, nameLast, ER, IP, ERA, post_ERA_mdn) %>%
+    tail(n=10) %>%
+    kable(
+        row.names=FALSE,
+        col.names=c('First Name', 'Last Name', 'ER', 'IP', 'ERA', 'Median Est. ERA'),
+        align='llcccc',
+        digits=c(NA, NA, 0, 2, 1, 1))
+```
+
+Notice that for the highest ERAs, the estimates have been brought down, while for the lowest ERAs, the estimates have been pushed up. They've all been "regressed toward the mean" at least in part. But also notice that the predictions for the best pitchers (low ERA) are no longer based on people with practically no data. We've ended up with better estimates, because those pitchers who had 0 ERA with practically no data have been pushed up toward the mean. (On the high end, this doesn't work so well, because ERA has a lower limit of 0, but no upper limit. But we've still brought in those high estimates quite a bit.)
+
+Below I've taken a random sample of 20 pitchers in the data, and graphed their actual first-year ERA with blue dots. The intensity of the blue indicates how much data we had (i.e., how many innings they pitched). Alongside that, I've also graphed our Bayesian estimates for each pitcher, with a gray dot at the median, and error bars indicating the 95% credible interval (the middle 95% of the probability distribution). Notice that the pitchers for which we had little data (light blue) have had their estimates pulled toward the mean to a greater extent, and the probability distributions are very wide; for pitchers for which we had more data (dark blue), the estimate does not change as much, and the error bars are much smaller. In other words, we can be more confident about their true ERA.
+
+```{r graph_ests}
+set.seed(123)
+sample_ERA <- first_year[sample(1:nrow(first_year), 20), ]
+sample_ests <- data.frame(
+    ERA=sample_ERA$ERA,
+    IP=sample_ERA$IP,
+    lower=qgamma(.025, shape=sample_ERA$post_ERA_shape, rate=sample_ERA$post_ERA_rate)*9,
+    median=qgamma(.5, shape=sample_ERA$post_ERA_shape, rate=sample_ERA$post_ERA_rate)*9,
+    upper=qgamma(.975, shape=sample_ERA$post_ERA_shape, rate=sample_ERA$post_ERA_rate)*9
+)
+sample_ests <- sample_ests %>%
+    arrange(desc(median)) %>%
+    mutate(k=1:20)
+
+ggplot(sample_ests, aes(y=k)) +
+    geom_point(aes(x=median), color='#595959') +
+    geom_errorbarh(aes(x=median, xmin=lower, xmax=upper), color='#595959') +
+    geom_point(aes(x=ERA, color=IP)) +
+    scale_color_gradient(low='#97fcfa', high='#002dfc') +
+    labs(x='ERA', y='Pitcher') +
+    theme(axis.text.y=element_blank(), axis.ticks.y=element_blank(), panel.grid.major.y=element_blank(),
+        panel.grid.minor.y=element_blank())
+```
+
+## Predicting Career ERA
+
+Okay, the real test of this model is to use it to predict pitchers' ERA over the rest of their career. As I said earlier, this is a challenging task, given that I am trying to use people's performance in their rookie year to predict their performance up to 20 years later! This is also a relatively simplistic model: I'm implicitly assuming that pitchers' performance does not change over their career; that there is no difference between pitchers across the decades, across teams, etc. The only bits of information I've used is the ER in their first year, and the number of innings they pitched.
+
+Below I've calculated the career ERA for all pitchers in the data set, then provided two estimates. Our baseline is the "naive estimate", which simply uses their actual ERA from their first year as the prediction. The comparison is the "Bayesian estimate", which is the median value we estimated for each pitcher. In the table below, I have calculated the squared error between the actual career ERA and these two estimates, and then sorted it based on the difference in the squared error.
+
+Note that one complication here is that in some cases, the career ERA score is not based on much more data than the first-year ERA score was! Because there is such variability in the length of career, some pitchers' career ERAs might not be much of a "true score" and might be very noisy estimates. I do try to restrict this a little by restricting to those who had pitched at least five innings after their first year, but in some cases the values to predict have almost as much noise as the predictions. However, this is more of a proof of concept (I don't recommend using this simplistic a model for Sabermetrics!), so I'd rather err on the side of including more data in the career scores.
+
+First, here are the top 20 cases, for which the Bayesian estimate did very well compared to baseline:
+
+```{r career_table}
+career <- pitching %>%
+    filter(year != 1)
+
+career <- career %>%
+    group_by(playerID) %>%
+    summarize(ER_crr=sum(ER), IP_crr=(sum(IPouts) / 3)) %>%
+    filter(IP_crr > 5) %>%
+    mutate(ERA_crr=9 * ER_crr/IP_crr)
+
+career <- career %>%
+    inner_join(first_year, by='playerID') %>%
+    arrange(desc(ERA_crr))
+
+career$naive_se <- (career$ERA_crr - career$ERA)^2
+career$bayes_se <- (career$ERA_crr - career$post_ERA_mdn)^2
+career$diff <- career$naive_se - career$bayes_se
+
+career %>%
+    arrange(desc(diff)) %>%
+    select(nameFirst, nameLast, ERA_crr, IP_crr, ERA, IP, post_ERA_mdn, naive_se, bayes_se, diff) %>%
+    head(n=20) %>%
+    kable(
+        row.names=FALSE,
+        col.names=c('First Name', 'Last Name', 'Career ERA', 'Career IP', 'First Year ERA', 'First Year IP', 'Bayesian Estimate', 'Naive SE', 'Bayes SE', 'Difference in SE'),
+        align='llcccccccc',
+        digits=c(NA, NA, 1, 2, 1, 2, 1, 2, 2, 2))
+```
+
+Of course, the model still doesn't do fantastic: Most of these cases are those cases where there was scant data to work from in the first year. For the top case, our Bayesian estimate still predicted an ERA of 93! That's still...excessive. But much less excessive than the naive estimate of 189.
+
+Let's look at the cases where the model performed poorly:
+
+```{r career_ests}
+career %>%
+    arrange(desc(diff)) %>%
+    select(nameFirst, nameLast, ERA_crr, IP_crr, ERA, IP, post_ERA_mdn, naive_se, bayes_se, diff) %>%
+    tail(n=20) %>%
+    kable(
+        row.names=FALSE,
+        col.names=c('First Name', 'Last Name', 'Career ERA', 'Career IP', 'First Year ERA', 'First Year IP', 'Bayesian Estimate', 'Naive SE', 'Bayes SE', 'Difference in SE'),
+        align='llcccccccc',
+        digits=c(NA, NA, 1, 2, 1, 2, 1, 2, 2, 2))
+```
+
+Again, these are cases where we have little data to work from. However, in these cases, the first-year ERAs were much less extreme; it appears as though the model pulled them up a little too much. This could suggest that ERA tends to decline a little after the first year, which is not something the model accounts for. Notably, however, the differences between the naive and Bayesian estimates are much worse on the end where the naive estimate did more poorly: When the naive estimate does badly, it does *really* badly. The differences in the squared error terms (the "Difference in SE" column) are much smaller in those cases where the Bayesian estimate does more poorly.
+
+Here's the final challenge: How do the two estimates do overall? I calculate the root mean squared error (RMSE) below. We want these numbers to be as low as possible:
+
+```{r rmse}
+cat('Naive Estimate RMSE:', sqrt(mean((career$ERA_crr - career$ERA)^2)), '\nBayesian estimate RMSE:', sqrt(mean((career$ERA_crr - career$post_ERA_mdn)^2)))
+```
+
+Hooray! We've made a modest improvement over the naive estimate. It might not be anything to write home about, but this can be interpreted as an improvement of about .69 in our estimates of the ERA. Our Bayesian estimate gets us, on average, .69 earned runs per game closer to the actual career ERA. All this from just their first year of data.
+
+Here I create a similar plot, sampling 20 random pitchers from our career data set. In red, I've plotted the actual career ERA. In blue, once again, is the first-year ERA (which was also the naive estimate). And in gray, with error bars, is our Bayesian estimate. It still looks like the model got thrown off on some of those points with very little data, but in general, the Bayesian estimate is closer to the actual career rate. (Also, what's with that one red dot way up there? Turns out that's a pitcher who had a great rookie year, but didn't pitch much afterwards, so his career ERA is a pretty bad estimate.)
+
+```{r graph_ests2}
+set.seed(222)
+sample_ERA2 <- career[sample(1:nrow(career), 20), ]
+sample_ests2 <- data.frame(
+    ERA_crr=sample_ERA2$ERA_crr,
+    ERA=sample_ERA2$ERA,
+    IP=sample_ERA2$IP,
+    lower=qgamma(.025, shape=sample_ERA2$post_ERA_shape, rate=sample_ERA2$post_ERA_rate)*9,
+    median=qgamma(.5, shape=sample_ERA2$post_ERA_shape, rate=sample_ERA2$post_ERA_rate)*9,
+    upper=qgamma(.975, shape=sample_ERA2$post_ERA_shape, rate=sample_ERA2$post_ERA_rate)*9
+)
+sample_ests2 <- sample_ests2 %>%
+    arrange(desc(median)) %>%
+    mutate(k=1:20)
+
+ggplot(sample_ests2, aes(y=k)) +
+    geom_point(aes(x=median), color='#595959') +
+    geom_errorbarh(aes(x=median, xmin=lower, xmax=upper), color='#595959') +
+    geom_point(aes(x=ERA_crr), color='red') +
+    geom_point(aes(x=ERA, color=IP)) +
+    scale_color_gradient(low='#97fcfa', high='#002dfc') +
+    labs(x='ERA', y='Pitcher') +
+    theme(axis.text.y=element_blank(), axis.ticks.y=element_blank(), panel.grid.major=element_blank(),
+        panel.grid.minor=element_blank())
+```
+
+## What is this model missing? (Or: Can we predict the greats with this model?)
+
+As noted above, this Bayesian model is pretty simple. Looking at the estimates of the best rookie pitchers, it's not going to do very well in terms of predicting the greatest pitchers of all time. Keep in mind that pitchers are evaluated on more than just ERA, for one thing. Some pitchers are skilled at getting strikeouts, while other pitchers might be better at getting batters to hit nice, easy fly balls that get caught. But to create a more complex model, we might want to add some additional variables.
+
+First, it might be important to model change over time. This could come in two ways. The data I used spans baseball from 1945 to the present; it's possible that the strategies used by pitchers, batters, and managers has changed over the years in ways that affects a pitcher's ERA. This would mostly have the effect of adding noise to the data, unless there are really sharp changes (perhaps a result of rule changes). The second aspect to the time aspect is that pitchers' skills may change over their career. Perhaps pitchers get better over time with experience, or perhaps age and potential for injury lead to decreasing performance.
+
+There are other characteristics of pitchers that might be important for a more complete model. Pitchers in the National League also bat, while pitchers in the American League do not. (They have a "designated hitter" instead.) This could mean that there is a different selection criteria for what makes a good pitcher in these two leagues. NL managers might prioritize a decent pitcher who can also bat well, while AL managers don't need to consider batting performance. The easiest way to account for this would be to create two Gamma distributions, one for each league, and update them separately. Other characteristics could include left- or right-handedness, the team a pitcher is on, any injuries that occur, etc. Pitchers can also specialize: some pitchers are starters, while others are relief pitchers or closers, and so on. I don't even pretend to understand the complexity of what goes into that decision, but it seems reasonable to expect that the sort of skills that makes one an effective closing pitcher might differ from those that makes one a good starter.
+
+The way to account for all these variables in a Bayesian framework would be to model them in some way: adding a linear trend for performance across career, for example, or creating separate priors for league, specialization, or handedness. The downside to this is that the complexity can mean that conjugate priors are no longer appropriate, if the priors are not all Gamma distributions. However, there are great packages that can handle these complex models using MCMC sampling: [R2jags](https://cran.r-project.org/web/packages/R2jags/index.html) and [RStan](http://mc-stan.org/users/interfaces/rstan) in R, and [PyMC](https://pymc-devs.github.io/pymc/)/[PyMC3](https://github.com/pymc-devs/pymc3) in Python. They can get around much of the difficulties that arise when trying to model complex Bayesian problems, and I highly recommend them.
+
+In summary, this is a nice, simple model that used empirical Bayes and pitchers' first-year performance to predict their career performance. It was not a dramatic, Earth-shattering improvement, but we did gain some predictive accuracy over the naive estimate. With a more complex model, we might be able to increase that accuracy even further. However, this shows a fairly simple way of accounting for cases where the amount of information we have varies across our data. This could be useful in a variety of applications: ranking products according to ratings, determining the quality of Reddit comments, predicting top Facebook posts, etc. It allows us to pull in data closer to the average (and adjust our level of uncertainty) when there is little information, and update our predictions as more and more data is gathered. That's a powerful tool, and it's where Bayesian models shine.
+
+Now let's go outside and throw the ball around, shall we?

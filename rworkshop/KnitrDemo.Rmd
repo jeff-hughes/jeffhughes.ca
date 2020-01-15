@@ -1,0 +1,296 @@
+---
+title: "Knitr Options and Formatting"
+author: Andriy Struk
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+    theme: cerulean
+    highlight: tango
+    code_folding: hide
+    
+---
+
+<style>
+pre code, pre, code {
+  overflow-y: auto !important;
+  max-height: 20em;
+}
+</style>
+
+Note: Make sure the R Markdown package is properly installed! If you cannot Knit this file run the following command first:
+
+    install.packages("rmarkdown")
+
+```{r,eval=F,echo=F}
+install.packages("rmarkdown") ## Simply run this chunk (it will not be executed everytime you Knit)
+```
+
+## Knitr Document Settings
+
+The following R Markdown syntax appears at the top of your markdown file, and it dictates how your file will be knitted:
+
+    ----
+    title: "R Markdown Demo" 
+    output: html_document
+    ----
+    
+* R Markdown Knits best into HTML, however Word documents and PDFs are also supported.
+* Knitting to HTML provides a great deal of flexibility and interactivity that Word and PDF cannot provide. 
+* HTML files can be saved, shared and viewed in any web browser.
+
+## HTML Document Format
+
+
+You can specify the format of your HTML document by adding options and parameters after **html_document:**. For example you can add a table of contents on the top of the page by adding **toc: true** like so:
+
+    ---- 
+    title: "R Markdown Demo"  
+      output:
+        html_document:  
+          toc: true  
+    ----
+
+Notice that **html_document:** now appears on a new indented line followed by a colon at the end, likewise **toc: true** also appears on a new indented line.
+
+### Formatting Options{.tabset}
+
+Ease of use and readability of your document can be improved substantially by adding HTML format options as well as using Chunk options. Here are some useful formating options. For more options see the [HTML Document Format Guide](http://rmarkdown.rstudio.com/html_document_format.html)
+
+#### Table Of Contents 
+
+Use option **toc: true** to add table of contents.  
+
+  * add option **toc_depth: 2** to dictate the heading levels to include in the TOC, the numerical value indicates depth. (e.g., # Heading 1, ## Heading 2 are displayed in TOC, while ### Heading 3 is not displayed)
+  * add option **toc_float: true** to make the TOC visible even when the page is scrolled.  
+
+    
+This is the syntax you would use to implement all these features:   
+
+***
+
+    ---- 
+    title: "R Markdown Demo"  
+      output:
+        html_document:  
+          toc: true  
+          toc_depth: 2
+          toc_float: true
+    ----
+
+#### Tabbed Sections
+
+To organize content in tabbed section as demonstrated here applying the **.tabset** class attribute to headers within a document. This will cause all sub-headers to appear within tabs. For example:
+
+    ### Formatting Options{.tabset}
+    
+    #### Table Of Contents  
+    
+    (tab content)
+    
+    #### Tabbed Sections
+    
+    (tab content)
+    
+    #### Appearance and Style
+    
+    (tab content)
+    
+    #### Code Folding
+    
+    (tab content)
+
+#### Appearance and Style
+
+You can change the appearance of the document by applying the following options:
+
+**theme:** specifies the Bootstrap theme to use for the page. Supported styles include "default", "cerulean",  "journal", "flatly", "readable", "spacelab", "united", "cosmo", "lumen", "paper", "sandstone", "simplex", and "yeti". See how these styles look like at [Bootswatch.com](http://bootswatch.com/)
+
+**highlight:** specifies the syntax highlighting style. Supported styles include "default", "tango", "pygments", "kate", "monochrome", "espresso",  "zenburn", "haddock", and "textmate". 
+
+This is the syntax you would use to implement all these features:   
+
+***
+
+    ---- 
+    title: "R Markdown Demo"  
+      output:
+        html_document:  
+          theme: cerulean  
+          highlight: tango
+    ----
+
+
+#### Code Folding
+
+Displaying code is not always nescessary when sharing your results, however occasionally your readers may want to know how you did your analysis.
+
+The **code_folding: hide** option enables you to include R code but have it hidden by default. Users can then choose to show hidden R code chunks either individually or document wide. For example:
+
+To implement this feature use the following syntax:
+
+    ---- 
+    title: "R Markdown Demo"  
+      output:
+        html_document:  
+        code_folding: hide
+    ----
+
+Your code chunk will be collapsed and can be unfolded by pressing the **Code** button on the right hand side of the document:
+
+```{r, echo=T}
+print(1^3 + 12^3)
+print(9^3 + 10^3)
+```
+
+Note: That the output of the chunk is still displayed.
+
+
+## Custom HTML Styling (CSS)
+
+You can create your own HTML customization through the use of [CSS language.](https://developer.mozilla.org/en-US/docs/Web/CSS)
+
+Here is one useful customization that uses CSS, which limits output text from your code chunks, with an option to scroll through the output vertically. Simply add the following to your Rmarkdown document (as is done in this Markdown file at the top of the document):
+
+    <style>
+    pre code, pre, code {
+      overflow-y: auto !important;
+      max-height: 20em;
+    }
+    </style>
+    
+
+Note: **max-height:** argument cotrols the maximum size of the text box before it becomes scrollable, while **overflow-y:** in this case is set to **auto** which tells the browser to handle when to make the text box scrollable automatically.
+
+This is how long output will now appear:
+
+```{r,echo=TRUE}
+for (x in 1:500){
+  print(x)
+}
+```
+
+## Global Chunk Options
+
+You can control the default options used for all your R code chunks by adding arguments to the **knitr::opts_chunk$set()** function.
+
+For example, **echo = FALSE** within the global chunk option will omit all R code within the knitted file.
+
+To see an example, unfold code by pressing the **code** button on the right hand side of the screen:
+
+```{r setup}
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+Note: Global or default chunk options are overidden by individual chunk options.
+
+## Chunk Options{.tabset}
+
+Here are some useful chunk options. See the [Reference Guide](https://www.rstudio.com/wp-content/uploads/2015/03/rmarkdown-reference.pdf) for more options.
+
+### Displaying Code
+
+You can display code of a particular chunk by stating echo = TRUE inside an individual chunk option, for example:
+
+    ## ```{r, echo=TRUE}
+    ## plot(pressure)
+    ## ```
+
+This will display the code (unfold by pressing **code** button) as well as the output:
+
+```{r, echo=TRUE}
+plot(pressure)
+```
+
+### Hiding/Displaying Chunk Output{.tabset}
+
+#### Excluding Chunks
+
+You can run the chunk while excluding it from the HTML document by using the **include = FALSE** option, for example:
+
+    ## ```{r, include=FALSE}
+    ## head(pressure) #Outputs top 5 rows
+    ## plot(pressure) #Outputs plot
+    ## ```
+
+Although the chunk has been executed, no output is visible:
+
+```{r,include=FALSE}
+head(pressure)
+plot(pressure)
+```
+
+#### Excluding Printed Results
+
+If you only want to hide the printed output (all output other than a figure) you can use the **results = "hide"** option, for example:
+
+    ## ```{r, results="hide"}
+    ## head(pressure) #Outputs top 5 rows
+    ## plot(pressure) #Outputs plot
+    ## ```
+
+This time only the plot is displayed while the printed results are hidden:
+
+```{r, results="hide"}
+head(pressure)
+plot(pressure)
+```
+
+#### Other Text Output Controls
+
+**warning = **(TRUE; logical) whether to preserve warnings (produced by warning()) in the output like when we run R code in a terminal (if FALSE, all warnings will be printed in the console instead of the output document); it can also take numeric values as indices to select a subset of warnings to include in the output.
+
+**error = **(TRUE; logical) whether to preserve errors (from stop()); by default, the evaluation will not stop even in case of errors!! If we want R to stop on errors, we need to set this option to FALSE
+when the chunk option include = FALSE, so knitr will stop on error, because it is easy to overlook potential errors in this case.
+
+**message = **(TRUE; logical) whether to preserve messages emitted by message() (similar to warning)
+
+#### Excluding Figures
+
+If you only want to hide the figures you can use the **fig.show = "hide"** option, for example:
+
+    ## ```{r, fig.show = "hide"}
+    ## head(pressure) #Outputs top 5 rows
+    ## plot(pressure) #Outputs plot
+    ## ```
+
+In this case the printed text is shown while the figure is hidden:
+
+```{r, fig.show = "hide"}
+head(pressure)
+plot(pressure)
+```
+
+### Displaying Figures
+
+Figures are automatically included in your rendered document, for example:
+
+```{r,echo=T}
+plot(cars)
+```
+
+If you only want to hide the figures you can use the **fig.show = "hide"** option, for example:
+
+    ## ```{r, fig.show = "hide"}
+    ## plot(pressure) #Outputs plot
+    ## ```
+
+In this case the figure is hidden:
+
+```{r, fig.show = "hide"}
+plot(pressure)
+```
+
+You can also control the figure size by using **fig.width, fig.height:** options (both are 7; numeric) These control the width and height of the plot, to be used in the graphics device (in inches) and have to be numeric. For example:
+
+    ## ```{r, fig.width = 6, fig.height = 6}
+    ## plot(pressure) #Outputs plot
+    ## ```
+    
+The displayed figure is now 6x6 inches:
+
+```{r, fig.width = 6, fig.height = 6}
+plot(pressure) #Outputs plot
+```
+
+
