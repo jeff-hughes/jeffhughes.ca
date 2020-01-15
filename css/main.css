@@ -93,7 +93,7 @@ body, select, input, textarea {
 }
 
 body {
-    background-color: #eee;
+    background-color: #f2efe4;
     color: #222;
     font-size: 0.9em;
 }
@@ -111,7 +111,7 @@ h1 {
 
 h2 {
     font-size: 26px;
-    margin-bottom: 10px;
+    margin: 40px 0 10px;
 }
 
 a, a:active, a:visited {
@@ -141,10 +141,9 @@ p {
 }
 @media only screen and (min-width: 850px) {
     #container {
-        border: 1px #c6c6c6 solid;
-        -moz-box-shadow: 0px 0px 12px #bbbbbb;
-        -webkit-box-shadow: 0px 0px 12px #bbbbbb;
-        box-shadow: 0px 0px 12px #bbbbbb;
+        -moz-box-shadow: 0px 0px 12px #ccc;
+        -webkit-box-shadow: 0px 0px 12px #ccc;
+        box-shadow: 0px 0px 12px #ccc;
         margin: 15px;
         padding: 15px;
     }
@@ -157,6 +156,7 @@ p {
 }
 
 #header {
+    margin-bottom: 50px;
     padding-top: 10px;
     width: 100%;
 }
@@ -194,10 +194,10 @@ p {
 }
 
 .logo img {
-    width: 300px;
+    width: 250px;
 }
 @media only screen and (min-width: 475px) {
-    logo img {
+    .logo img {
         width: 308px;
     }
 }
@@ -246,7 +246,7 @@ p {
     border-top: 1px #c0c0c0 solid;
     background-color: #fdfdfd;
     clear: both;
-    margin: 15px auto;
+    margin: 35px auto 15px;
     width: 250px;
     height: 1px;
 }
@@ -282,19 +282,29 @@ p {
 }
 
 .photo {
-    display: block;
-    margin: 0 auto;
+    display: none;
 }
-@media only screen and (min-width: 475px) {
+@media only screen and (min-width: 575px) {
     .photo {
+        display: block;
         float: right;
-        margin: 0 30px 10px 10px;
-} 
+        margin: 0 10px 10px 10px;
+    }
+}
+
+.resumecontainer {
+    text-align: center;
+}
+@media only screen and (min-width: 700px) {
+    .resumecontainer {
+        text-align: left;
+    }
+}
 
   
 footer {
     margin: 0 auto;
-    padding: 15px;
+    padding: 0 15px 15px;
     text-align: center;
 }
 
