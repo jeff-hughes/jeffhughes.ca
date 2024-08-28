@@ -111,7 +111,11 @@ h1 {
 
 h2 {
     font-size: 26px;
-    margin: 40px 0 10px;
+    margin: 20px 0 10px;
+}
+
+h3 {
+    margin-top: 0;
 }
 
 a, a:active, a:visited {
@@ -122,6 +126,10 @@ a, a:active, a:visited {
 a:hover {
     color: #e32323;
     text-decoration: none;
+}
+
+section {
+    clear: both;
 }
 
 p {
@@ -156,12 +164,13 @@ p {
 }
 
 #header {
-    margin-bottom: 50px;
+    margin-bottom: 20px;
     padding-top: 10px;
     width: 100%;
 }
 @media only screen and (min-width: 475px) {
     #header {
+        margin-bottom: 40px;
         padding-top: 0;
     }
 }
@@ -208,18 +217,14 @@ p {
     list-style: none;
     list-style-image: none;
     margin: 0;
-    padding: 10px 0;
+    padding: 5px 0;
     text-align: center;
-}
-@media only screen and (min-width: 475px) {
-    #sociallist {
-        padding-right: 5px;
-    }
 }
 @media only screen and (min-width: 700px) {
     #sociallist {
         clear: none;
         float: right;
+        padding-right: 5px;
     }
 }
 
@@ -227,19 +232,14 @@ p {
     display: inline;
     margin-right: 3px;
 }
-@media only screen and (min-width: 700px) {
-    #sociallist li {
-        margin-right: 8px;
-    }
-}
 
 #sociallist li:last-child {
     margin-right: 0;
 }
-@media only screen and (min-width: 700px) {
-    #sociallist li:last-child {
-        margin-right: 0;
-    }
+
+#sociallist img {
+    width: 50px;
+    height: 50px;
 }
   
 .section_divide {
@@ -278,11 +278,62 @@ p {
 }
 
 #main p {
-    margin-bottom: 25px;
+    margin-bottom: 1em;
+}
+
+.books_section {
+    margin: 1em 0;
+}
+
+.book_container {
+    float: left;
+    width: 160px;
+    margin-bottom: 1em;
+}
+
+@media only screen and (min-width: 700px) {
+    .book_container {
+        width: 180px;
+    }
+}
+
+.book_links dt {
+    margin-top: 10px;
+}
+
+.book_links dd {
+    margin: 0;
+}
+
+.book_links ul {
+    list-style-type: none;
+    margin: 0 15px 0 0;
+    padding: 0;
+}
+
+.book_links li {
+    display: inline-block;
+    margin: 3px 0;
+}
+
+.book_links a {
+    background-color: #374f7c;
+    border: 1px #374f7c solid;
+    border-radius: 5px;
+    color: #f2f2f2;
+    text-decoration: none;
+    font-size: 10px;
+    padding: 3px 5px;
+}
+
+.book_links a:hover, .book_links a:active {
+    background-color: #fff;
+    color: #374f7c;
 }
 
 .photo {
-    display: none;
+    float: right;
+    margin: 0 0 5px 5px;
 }
 @media only screen and (min-width: 575px) {
     .photo {
@@ -292,16 +343,6 @@ p {
     }
 }
 
-.resumecontainer {
-    text-align: center;
-}
-@media only screen and (min-width: 700px) {
-    .resumecontainer {
-        text-align: left;
-    }
-}
-
-  
 footer {
     margin: 0 auto;
     padding: 0 15px 15px;
