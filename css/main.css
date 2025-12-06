@@ -283,8 +283,6 @@ p {
 }
 
 .books_section {
-    display: grid;
-    grid-template-columns: 160px 1fr;
     margin: 1em 0 1.5em;
 }
 
@@ -293,23 +291,36 @@ p {
 }
 
 .book_cover_container {
-    grid-column: 1;
     width: 160px;
     margin-bottom: 1em;
 }
 
-@media only screen and (min-width: 700px) {
-    .books_section {
-        grid-template-columns: 180px 1fr;
+@media only screen and (min-width: 330px) {
+    .book_cover_container {
+        float: left;
     }
 }
 
-.book_synopsis {
-    grid-column: 2;
+@media only screen and (min-width: 680px) {
+    .books_section {
+        display: grid;
+        grid-template-columns: 170px 1fr;
+    }
+    .book_cover_container {
+        float: none;
+        grid-column: 1;
+    }
+    .book_synopsis {
+        grid-column: 2;
+    }
 }
 
 .book_link_group {
     float: left;
+    margin-bottom: 0.5em;
+}
+
+.book_link_group:first-of-type {
     margin-right: 3em;
 }
 
@@ -322,21 +333,14 @@ p {
     margin: 0;
 }
 
+.book_links p {
+    margin-bottom: 0.5em !important;
+}
+
 .book_link_group div {
     display: inline-block;
     text-align: center;
     vertical-align: top;
-}
-
-.book_links ul {
-    list-style-type: none;
-    margin: 0 15px 0 0;
-    padding: 0;
-}
-
-.book_links li {
-    display: inline-block;
-    margin: 3px 0;
 }
 
 .book_links .link_button {
@@ -347,12 +351,18 @@ p {
     display: inline-block;
     text-decoration: none;
     font-size: 16px;
-    padding: 7px 18px;
+    padding: 5px 12px;
 }
 
 .book_links .link_button:hover, .book_links .link_button:active {
     background-color: #fff;
     color: #374f7c;
+}
+
+@media only screen and (min-width: 760px) {
+    .book_links .link_button {
+        padding: 7px 18px;
+    }
 }
 
 .photo {
